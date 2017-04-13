@@ -730,13 +730,13 @@ static int calculate_residency(struct power_params *base_pwr,
 	residency /= (int32_t)(base_pwr->ss_power  - next_pwr->ss_power);
 
 	if (residency < 0) {
-		__WARN_printf("%s: Incorrect power attributes for LPM\n",
+		pr_err("%s: residency < 0 for LPM\n",
 				__func__);
-		return 0;
+		return next_pwr->time_overhead_us;
 	}
 
-	return residency < base_pwr->time_overhead_us ?
-				base_pwr->time_overhead_us : residency;
+	return residency < next_pwr->time_overhead_us ?
+				next_pwr->time_overhead_us : residency;
 }
 
 static int parse_cpu_levels(struct device_node *node, struct lpm_cluster *c)
