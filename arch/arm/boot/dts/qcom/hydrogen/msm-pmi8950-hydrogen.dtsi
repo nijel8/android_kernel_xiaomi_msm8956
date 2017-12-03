@@ -314,8 +314,7 @@
 			compatible = "qcom,qpnp-fg";
 			#address-cells = <1>;
 			#size-cells = <1>;
-			qcom,resume-soc = <99>;
-			qcom,resume-soc-raw = <254>;
+			qcom,resume-soc = <98>;
 			qcom,fg-delta-soc = <1>;
 			status = "okay";
 			qcom,bcl-lm-threshold-ma = <127>;
