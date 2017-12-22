@@ -2063,9 +2063,23 @@ static void soc_work_fn(struct work_struct *work)
 {	struct fg_chip *chip = container_of(work,
 				struct fg_chip,
 				soc_work.work);
-	pr_info("adjust_soc: BATTERY: Capacity %d%%, Charge %dµAh, "
-                        "Current %dµA, Voltage %dµV, Temperature %dd°C\n",
-			get_prop_capacity(chip),
+	char *status = "UNKNOWN";
+	switch (chip->status) {
+	case POWER_SUPPLY_STATUS_CHARGING:
+		status = "CHARGING";
+		break;
+	case POWER_SUPPLY_STATUS_DISCHARGING:
+		status = "DISCHARGING";
+		break;
+	case POWER_SUPPLY_STATUS_NOT_CHARGING:
+		status = "NOT_CHARGING";
+		break;
+	case POWER_SUPPLY_STATUS_FULL:
+		status = "FULL";
+	}
+	pr_info("adjust_soc: BATTERY: %s, Capacity %d%%, Charge %duAh, "
+                        "Current %duA, Voltage %duV, Temperature %ddC\n",
+			status, get_prop_capacity(chip),
 			get_sram_prop_now(chip, FG_DATA_BATT_SOC),
 			get_sram_prop_now(chip, FG_DATA_CURRENT),
 			get_sram_prop_now(chip, FG_DATA_VOLTAGE),
