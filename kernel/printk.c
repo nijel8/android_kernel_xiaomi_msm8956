@@ -45,6 +45,8 @@
 #include <linux/poll.h>
 #include <linux/irq_work.h>
 #include <linux/utsname.h>
+#include <linux/seq_file.h>
+#include <linux/proc_fs.h>
 
 #include <asm/uaccess.h>
 
@@ -216,6 +218,8 @@ struct log {
 	u32 magic;		/* handle for ramdump analysis tools */
 #endif
 };
+
+static u64 dmesg_last_timestamp;
 
 /*
  * The logbuf_lock protects kmsg buffer, indices, counters. It is also
@@ -406,6 +410,33 @@ static void log_oops_store(struct log *msg)
 }
 #endif
 
+static int dmesg_last_ts_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%5lu\n",  (unsigned long ) dmesg_last_timestamp / 1000000000);
+	return 0;
+}
+
+static int dmesg_last_ts_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, dmesg_last_ts_proc_show, NULL);
+}
+
+static const struct file_operations dmesg_last_ts_proc_fops = {
+	.owner   = THIS_MODULE,
+	.open = dmesg_last_ts_proc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int __init proc_dmesg_last_ts_init(void)
+{
+	proc_create("dmesg_last_ts", 0, NULL, &dmesg_last_ts_proc_fops);
+	return 0;
+}
+
+module_init(proc_dmesg_last_ts_init);
+
 /* insert record into the buffer, discard old ones, update heads */
 static void log_store(int facility, int level,
 		      enum log_flags flags, u64 ts_nsec,
@@ -464,6 +495,7 @@ static void log_store(int facility, int level,
 		msg->ts_nsec = ts_nsec;
 	else
 		msg->ts_nsec = local_clock();
+	dmesg_last_timestamp = msg->ts_nsec;
 	memset(log_dict(msg) + dict_len, 0, pad_len);
 	msg->len = sizeof(struct log) + text_len + dict_len + pad_len;
 
