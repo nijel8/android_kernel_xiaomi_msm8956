@@ -406,6 +406,8 @@ static void log_oops_store(struct log *msg)
 }
 #endif
 
+static u64 printk_get_ts(void);
+
 /* insert record into the buffer, discard old ones, update heads */
 static void log_store(int facility, int level,
 		      enum log_flags flags, u64 ts_nsec,
@@ -463,7 +465,7 @@ static void log_store(int facility, int level,
 	if (ts_nsec > 0)
 		msg->ts_nsec = ts_nsec;
 	else
-		msg->ts_nsec = local_clock();
+		msg->ts_nsec = printk_get_ts();
 	memset(log_dict(msg) + dict_len, 0, pad_len);
 	msg->len = sizeof(struct log) + text_len + dict_len + pad_len;
 
@@ -1015,17 +1017,118 @@ static inline void boot_delay_msec(int level)
 #endif
 
 #if defined(CONFIG_PRINTK_TIME)
-static bool printk_time = 1;
+static int printk_time = 1;
+static u64 printk_ts;
+
+/**
+ * enum timestamp_sources - Timestamp sources for printk() messages.
+ * @PRINTK_TIME_DISABLED: No time stamp.
+ * @PRINTK_TIME_LOCAL: Local hardware clock timestamp.
+ * @PRINTK_TIME_MONOTONIC: Local hardware clock timestamp + suspend time.
+ */
+enum timestamp_sources {
+    PRINTK_TIME_DISABLED = 0,
+    PRINTK_TIME_LOCAL = 1,
+    PRINTK_TIME_MONOTONIC = 2,
+};
+
+static u64 ts_monotonic(void)
+{
+    struct timespec ts;
+
+    ts = ns_to_timespec(local_clock());
+    monotonic_to_bootbased(&ts);
+
+    return timespec_to_ns(&ts);
+ }
+
+static int printk_set_ts_source(enum timestamp_sources ts_source)
+ {
+    int err = 0;
+
+    switch (ts_source) {
+    case PRINTK_TIME_LOCAL:
+        printk_ts = local_clock();
+        break;
+    case PRINTK_TIME_MONOTONIC:
+        printk_ts = ts_monotonic();
+        break;
+    case PRINTK_TIME_DISABLED:
+    /*
+     * The timestamp is always stored into the log buffer.
+     * Keep the current one.
+     */
+        break;
+    default:
+        err = -EINVAL;
+        break;
+    }
+
+    if (!err)
+        printk_time = ts_source;
+    return err;
+ }
+
+ static u64 printk_get_ts(void)
+{
+    int err = printk_set_ts_source(printk_time);
+
+    /* Fallback for invalid or disabled timestamp source */
+    if (err)
+        printk_ts = local_clock();
+
+    return printk_ts;
+}
+
+static int param_set_time(const char *val, const struct kernel_param *kp)
+{
+    char *param = strstrip((char *)val);
+    int time_source = -1;
+    int err;
+
+    if (strlen(param) == 1) {
+        /* Preserve legacy boolean settings */
+        if ((param[0] == '0') || (param[0] == 'n') ||
+            (param[0] == 'N'))
+            time_source = PRINTK_TIME_DISABLED;
+        if ((param[0] == '1') || (param[0] == 'y') ||
+            (param[0] == 'Y'))
+            time_source = PRINTK_TIME_LOCAL;
+        if (param[0] == '2')
+            time_source = PRINTK_TIME_MONOTONIC;
+    }
+
+    err = printk_set_ts_source(time_source);
+    if (err) {
+        pr_warn("printk: invalid timestamp option %s\n", param);
+        return err;
+    }
+
+    if (time_source == PRINTK_TIME_MONOTONIC)
+        pr_info("printk: using monotonic timestamps");
+
+    return 0;
+ }
+
+ static int param_get_time(char *buffer, const struct kernel_param *kp)
+ {
+    return scnprintf(buffer, PAGE_SIZE, "%d", printk_time);
+ }
+
+ static struct kernel_param_ops printk_time_ops = {
+    .set = param_set_time,
+    .get = param_get_time,
+ };
 #else
-static bool printk_time;
+static int printk_time = 0;
 #endif
-module_param_named(time, printk_time, bool, S_IRUGO | S_IWUSR);
+module_param_cb(time, &printk_time_ops, NULL, 0644);
 
 static size_t print_time(u64 ts, char *buf)
 {
 	unsigned long rem_nsec;
 
-	if (!printk_time)
+	if (printk_time == 0)
 		return 0;
 
 	rem_nsec = do_div(ts, 1000000000);
@@ -1738,7 +1841,7 @@ static bool cont_add(int facility, int level, const char *text, size_t len)
 		cont.facility = facility;
 		cont.level = level;
 		cont.owner = current;
-		cont.ts_nsec = local_clock();
+		cont.ts_nsec = printk_get_ts();
 		cont.flags = 0;
 		cont.cons = 0;
 		cont.flushed = false;
