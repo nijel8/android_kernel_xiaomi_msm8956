@@ -46,6 +46,36 @@
 		qup10 = &test_pacman;
 	};
 
+    /*
+     * IMPORTANT!!! Remove /system and /vendor partition lines from fstab.qcom in device tree
+     * in device tree or mark them as recoveryonly
+     */
+    firmware {
+        android {
+            compatible = "android,firmware";
+            fstab {
+                compatible = "android,fstab";
+                system {
+                    compatible = "android,system";
+                    dev = "/dev/block/platform/soc.0/7824900.sdhci/by-name/system";
+                    type = "ext4";
+                    mnt_flags = "ro,barrier=1,discard";
+                    fsmgr_flags = "wait";
+                    status = "ok";
+                };
+                vendor {
+                    compatible = "android,vendor";
+                    dev = "/dev/block/platform/soc.0/7824900.sdhci/by-name/cust";
+                    type = "ext4";
+                    mnt_flags = "ro,barrier=1,discard";
+                    fsmgr_flags = "wait";
+                    /* change to status = "ok" to enable early mount for Treble devices */
+                    status = "disabled";
+                };
+            };
+        };
+    };
+
 	soc: soc { };
 
 	aliases {
