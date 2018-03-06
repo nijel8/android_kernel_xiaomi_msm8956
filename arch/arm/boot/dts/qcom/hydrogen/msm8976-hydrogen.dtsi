@@ -70,7 +70,7 @@
                     mnt_flags = "ro,barrier=1,discard";
                     fsmgr_flags = "wait";
                     /* change to status = "ok" to enable early mount for Treble devices */
-                    status = "disabled";
+                    status = "ok";
                 };
             };
         };
